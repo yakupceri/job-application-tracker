@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS candidate_jobs (
     link TEXT,
     reason TEXT,
     tag TEXT NOT NULL,
-    found_date TEXT NOT NULL
+    found_date TEXT NOT NULL,
+    user_id INTEGER
 )
 """
 
@@ -69,11 +70,14 @@ def add_candidate_job(
     reason: str,
     tag: str,
     found_date: str | None = None,
+    user_id: int | None = None,
 ) -> int:
     """Insert a new candidate job row and return its new id.
 
     Raises ``ValueError`` if ``tag`` is not one of ``VALID_TAGS``. If
-    ``found_date`` is omitted, today's ISO date is used.
+    ``found_date`` is omitted, today's ISO date is used. ``user_id`` scopes
+    the row to a web-app user; omitted, it is stored as ``NULL`` (standalone
+    usage).
     """
     if tag not in VALID_TAGS:
         raise ValueError(f"Invalid tag '{tag}': expected one of {VALID_TAGS}")
@@ -86,34 +90,56 @@ def add_candidate_job(
 
     cursor = conn.execute(
         """
-        INSERT INTO candidate_jobs (company, position, city, link, reason, tag, found_date)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO candidate_jobs (company, position, city, link, reason, tag, found_date, user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (company, position, city, link, reason, tag, found_date),
+        (company, position, city, link, reason, tag, found_date, user_id),
     )
     conn.commit()
     return cursor.lastrowid
 
 
-def list_candidate_jobs(conn: sqlite3.Connection) -> list[sqlite3.Row]:
-    """Return all candidate jobs, best tag first.
+def list_candidate_jobs(
+    conn: sqlite3.Connection, user_id: int | None = None
+) -> list[sqlite3.Row]:
+    """Return candidate jobs, best tag first.
 
     Order is "Çok uygun", then "Uygun", then "Zorlama" (via a SQL CASE
-    expression), and by ``found_date`` ascending within each tag.
+    expression), and by ``found_date`` ascending within each tag. When
+    ``user_id`` is given, only that user's rows are returned; when omitted,
+    all rows are (standalone/legacy usage).
     """
-    cursor = conn.execute(
-        f"""
-        SELECT id, company, position, city, link, reason, tag, found_date
-        FROM candidate_jobs
-        ORDER BY {_TAG_ORDER_SQL}, found_date ASC
-        """
-    )
+    if user_id is None:
+        cursor = conn.execute(
+            f"""
+            SELECT id, company, position, city, link, reason, tag, found_date
+            FROM candidate_jobs
+            ORDER BY {_TAG_ORDER_SQL}, found_date ASC
+            """
+        )
+    else:
+        cursor = conn.execute(
+            f"""
+            SELECT id, company, position, city, link, reason, tag, found_date
+            FROM candidate_jobs
+            WHERE user_id = ?
+            ORDER BY {_TAG_ORDER_SQL}, found_date ASC
+            """,
+            (user_id,),
+        )
     return cursor.fetchall()
 
 
-def clear_candidate_jobs(conn: sqlite3.Connection) -> None:
-    """Delete all rows from ``candidate_jobs`` (e.g. before refilling)."""
-    conn.execute("DELETE FROM candidate_jobs")
+def clear_candidate_jobs(conn: sqlite3.Connection, user_id: int | None = None) -> None:
+    """Delete candidate job rows (e.g. before refilling).
+
+    When ``user_id`` is given, only that user's rows are deleted; when
+    omitted, every row is (standalone/legacy usage).
+    """
+    if user_id is None:
+        conn.execute("DELETE FROM candidate_jobs")
+    else:
+        conn.execute("DELETE FROM candidate_jobs WHERE user_id = ?", (user_id,))
     conn.commit()
 
 
@@ -128,19 +154,28 @@ def _infer_channel(link: str | None) -> str:
     return "email"
 
 
-def mark_candidate_applied(conn: sqlite3.Connection, candidate_id: int) -> int:
+def mark_candidate_applied(
+    conn: sqlite3.Connection, candidate_id: int, user_id: int | None = None
+) -> int:
     """Move a candidate job into ``applications`` and remove it from the list.
 
-    Looks up ``candidate_id`` in ``candidate_jobs``, inserts a matching row
-    into ``applications`` via ``tracker.add_application`` (today's date,
-    channel inferred from the link's domain via ``_infer_channel``, and the
-    original link/reason preserved in the note), then deletes the candidate
-    row. Returns the new application id. Raises ``ValueError`` if no
-    candidate job with ``candidate_id`` exists.
+    Looks up ``candidate_id`` in ``candidate_jobs`` (restricted to
+    ``user_id`` when given), inserts a matching row into ``applications``
+    via ``tracker.add_application`` (today's date, channel inferred from the
+    link's domain via ``_infer_channel``, and the original link/reason
+    preserved in the note, scoped to the same ``user_id``), then deletes the
+    candidate row. Returns the new application id. Raises ``ValueError`` if
+    no matching candidate job exists.
     """
-    row = conn.execute(
-        "SELECT * FROM candidate_jobs WHERE id = ?", (candidate_id,)
-    ).fetchone()
+    if user_id is None:
+        row = conn.execute(
+            "SELECT * FROM candidate_jobs WHERE id = ?", (candidate_id,)
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT * FROM candidate_jobs WHERE id = ? AND user_id = ?",
+            (candidate_id, user_id),
+        ).fetchone()
     if row is None:
         raise ValueError(f"No candidate job found with id {candidate_id}")
 
@@ -159,6 +194,7 @@ def mark_candidate_applied(conn: sqlite3.Connection, candidate_id: int) -> int:
         applied_date=date.today().isoformat(),
         channel=channel,
         note=note,
+        user_id=user_id,
     )
 
     conn.execute("DELETE FROM candidate_jobs WHERE id = ?", (candidate_id,))
