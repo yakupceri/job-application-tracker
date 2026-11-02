@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block wrapclass %} narrow{% endblock %}
+{% block body %}
+<header class="top">
+  <div class="spacer"></div>
+  <div class="toolbar">
+    <button type="button" class="theme-btn" onclick="toggleTheme()">🌓 {{ t('theme_toggle') }}</button>
+    <span class="lang-switch">
+      <a href="{{ url_for('set_lang', lang_code='tr') }}" class="{{ 'active' if lang == 'tr' else '' }}">TR</a>
+      <a href="{{ url_for('set_lang', lang_code='en') }}" class="{{ 'active' if lang == 'en' else '' }}">EN</a>
+    </span>
+  </div>
+</header>
+
+<div class="auth-panel">
+  <h1>{{ t('login_heading') }}</h1>
+  <p class="sub">{{ t('app_subtitle') }}</p>
+
+  {% if just_registered %}
+  <div class="auth-success">{{ t('register_success') }}</div>
+  {% endif %}
+  {% if error %}
+  <div class="auth-error">{{ error }}</div>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('login') }}">
+    <div class="auth-field">
+      <label for="username">{{ t('login_username') }}</label>
+      <input type="text" id="username" name="username" required autofocus>
+    </div>
+    <div class="auth-field">
+      <label for="password">{{ t('login_password') }}</label>
+      <input type="password" id="password" name="password" required>
+    </div>
+    <button type="submit" class="primary-btn full-btn">{{ t('login_submit') }}</button>
+  </form>
+
+  <div class="auth-switch">
+    {{ t('login_no_account') }}
+    <a href="{{ url_for('register') }}">{{ t('login_register_link') }}</a>
+  </div>
+</div>
+{% endblock %}

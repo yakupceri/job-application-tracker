@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block body %}
+<header class="top">
+  <div class="logo">💼</div>
+  <div>
+    <h1>{{ t('app_title') }}</h1>
+    <p>{{ t('app_subtitle') }}</p>
+  </div>
+  <div class="spacer"></div>
+  <div class="toolbar">
+    <button type="button" class="theme-btn" onclick="toggleTheme()">🌓 {{ t('theme_toggle') }}</button>
+    <span class="lang-switch">
+      <a href="{{ url_for('set_lang', lang_code='tr') }}" class="{{ 'active' if lang == 'tr' else '' }}">TR</a>
+      <a href="{{ url_for('set_lang', lang_code='en') }}" class="{{ 'active' if lang == 'en' else '' }}">EN</a>
+    </span>
+    {% if username %}
+    <span class="pill-btn">👤 {{ username }}</span>
+    <form method="post" action="{{ url_for('logout') }}">
+      <button type="submit" class="pill-btn">{{ t('nav_logout') }}</button>
+    </form>
+    {% endif %}
+  </div>
+</header>
+
+<div class="stats-row">
+  <div class="stat">
+    <div class="num">{{ applications|length }}</div>
+    <div class="label">{{ t('stat_applications') }}</div>
+  </div>
+  <div class="stat accent-ok">
+    <div class="num">{{ candidate_jobs|selectattr('tag', 'equalto', 'Çok uygun')|list|length }}</div>
+    <div class="label">{{ t('stat_great_jobs') }}</div>
+  </div>
+  <div class="stat accent-warn">
+    <div class="num">{{ candidate_jobs|length }}</div>
+    <div class="label">{{ t('stat_candidate_jobs') }}</div>
+  </div>
+</div>
+
+<section>
+  <div class="section-head">
+    <h2>{{ t('section_add_application') }}</h2>
+  </div>
+  <div class="panel form-panel">
+    <form method="post" action="{{ url_for('create_application') }}">
+      <div class="form-grid">
+        <div class="field">
+          <label for="company">{{ t('field_company') }}</label>
+          <input type="text" id="company" name="company" required>
+        </div>
+        <div class="field">
+          <label for="position">{{ t('field_position') }}</label>
+          <input type="text" id="position" name="position" required>
+        </div>
+        <div class="field">
+          <label for="applied_date">{{ t('field_date') }}</label>
+          <input type="date" id="applied_date" name="applied_date" required>
+        </div>
+        <div class="field">
+          <label for="channel">{{ t('field_channel') }}</label>
+          <select id="channel" name="channel" required>
+            {% for c in valid_channels %}
+            <option value="{{ c }}">{{ t('channel_' + c) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="field">
+          <label for="note">{{ t('field_note') }}</label>
+          <input type="text" id="note" name="note">
+        </div>
+      </div>
+      <div style="margin-top: 0.8rem;">
+        <button type="submit" class="primary-btn">{{ t('btn_add') }}</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>{{ t('section_my_applications') }}</h2>
+    <span class="count">{{ applications|length }} {{ t('count_records') }}</span>
+  </div>
+  <div class="panel table-wrap">
+    {% if applications %}
+    <table>
+      <thead>
+        <tr>
+          <th>{{ t('th_company') }}</th>
+          <th>{{ t('th_position') }}</th>
+          <th>{{ t('th_date') }}</th>
+          <th>{{ t('th_channel') }}</th>
+          <th>{{ t('th_status') }}</th>
+          <th>{{ t('th_note') }}</th>
+          <th>{{ t('th_actions') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in applications %}
+        <tr>
+          <td class="company">{{ a['company'] }}</td>
+          <td>{{ a['position'] }}</td>
+          <td>{{ a['applied_date'] }}</td>
+          <td>{{ t('channel_' + a['channel']) }}</td>
+          <td>
+            {% set s = a['status'] %}
+            <span class="pill pill-{{ s }}">{{ t('status_' + s|replace('-', '_')) }}</span>
+          </td>
+          <td class="note">{{ a['note'] or '' }}</td>
+          <td>
+            <div class="row-actions">
+              <form method="post" action="{{ url_for('set_application_status', app_id=a['id']) }}">
+                <select name="status" class="status-select" onchange="this.form.submit()">
+                  {% for st in valid_statuses %}
+                  <option value="{{ st }}" {% if st == s %}selected{% endif %}>{{ t('status_' + st|replace('-', '_')) }}</option>
+                  {% endfor %}
+                </select>
+              </form>
+              <form method="post" action="{{ url_for('delete_application', app_id=a['id']) }}" onsubmit="return confirm('{{ t('confirm_delete') }}');">
+                <button type="submit" class="danger-btn">{{ t('btn_delete') }}</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">{{ t('empty_applications') }}</p>
+    {% endif %}
+  </div>
+</section>
+
+<section>
+  <div class="section-head">
+    <h2>{{ t('section_candidate_jobs') }}</h2>
+    <span class="count">{{ candidate_jobs|length }} {{ t('count_jobs') }}</span>
+  </div>
+  {% if candidate_jobs %}
+  <div class="job-grid">
+    {% for job in candidate_jobs %}
+    <div class="job-card">
+      <div class="job-card-top">
+        <h3>{{ job['company'] }}<span class="pos">{{ job['position'] }}</span></h3>
+        {% if job['tag'] == 'Çok uygun' %}
+          <span class="tag tag-great">{{ t('tag_great') }}</span>
+        {% elif job['tag'] == 'Uygun' %}
+          <span class="tag tag-good">{{ t('tag_good') }}</span>
+        {% else %}
+          <span class="tag tag-stretch">{{ t('tag_stretch') }}</span>
+        {% endif %}
+      </div>
+      <div class="job-meta">
+        <span>📍 {{ job['city'] or t('city_unspecified') }}</span>
+        {% if job['link'] %}
+        <span class="dot">&middot;</span>
+        <a class="link-btn" href="{{ job['link'] }}" target="_blank" rel="noopener">{{ t('btn_view_listing') }}</a>
+        {% endif %}
+      </div>
+      <div class="job-reason">{{ job['reason'] or '' }}</div>
+      <div class="job-actions">
+        <form method="post" action="{{ url_for('apply', candidate_id=job['id']) }}">
+          <button type="submit" class="primary-btn">{{ t('btn_apply') }}</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="panel"><p class="empty">{{ t('empty_candidate_jobs') }}</p></div>
+  {% endif %}
+</section>
+
+<footer class="foot">{{ t('footer_text') }}</footer>
+{% endblock %}
