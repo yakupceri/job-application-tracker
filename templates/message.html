@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block wrapclass %} narrow{% endblock %}
+{% block body %}
+<div class="auth-panel">
+  {% if ok %}
+    <div class="auth-success">{{ t(message_key) }}</div>
+  {% else %}
+    <div class="auth-error">{{ t(message_key) }}</div>
+  {% endif %}
+  <div class="auth-switch">
+    <a href="{{ url_for('main.login') }}">{{ t('forgot_back_to_login') }}</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block body %}
+<header class="top">
+  <div class="spacer"></div>
+  <div class="toolbar">
+    <button type="button" class="theme-btn" onclick="toggleTheme()">🌓 {{ t('theme_toggle') }}</button>
+    <span class="lang-switch">
+      <a href="{{ url_for('main.set_lang', lang_code='tr') }}" class="{{ 'active' if lang == 'tr' else '' }}">TR</a>
+      <a href="{{ url_for('main.set_lang', lang_code='en') }}" class="{{ 'active' if lang == 'en' else '' }}">EN</a>
+    </span>
+    <a class="pill-btn" href="{{ url_for('main.index') }}">← {{ t('app_title') }}</a>
+  </div>
+</header>
+
+<h1 style="margin-bottom: 1.2rem;">{{ t('profile_heading') }}</h1>
+
+<section>
+  <div class="section-head"><h2>{{ t('profile_section_info') }}</h2></div>
+  <div class="panel form-panel">
+    {% if update_success %}<div class="auth-success">{{ t('profile_update_success') }}</div>{% endif %}
+    {% if update_error %}<div class="auth-error">{{ t(update_error) }}</div>{% endif %}
+    <form method="post" action="{{ url_for('main.profile_update') }}">
+      <div class="form-grid" style="grid-template-columns: repeat(2, 1fr);">
+        <div class="field">
+          <label for="full_name">{{ t('register_full_name') }}</label>
+          <input type="text" id="full_name" name="full_name" value="{{ current_user.full_name }}" required>
+        </div>
+        <div class="field">
+          <label for="email">{{ t('register_email') }}</label>
+          <input type="email" id="email" name="email" value="{{ current_user.email }}" required>
+        </div>
+        <div class="field">
+          <label>{{ t('register_username') }}</label>
+          <input type="text" value="{{ current_user.username }}" disabled>
+        </div>
+        <div class="field">
+          <label for="target_position">{{ t('register_target_position') }}</label>
+          <input type="text" id="target_position" name="target_position" value="{{ current_user.target_position or '' }}">
+        </div>
+        <div class="field">
+          <label for="city_preference">{{ t('register_city') }}</label>
+          <input type="text" id="city_preference" name="city_preference" value="{{ current_user.city_preference or '' }}">
+        </div>
+      </div>
+      <div style="margin-top: 0.8rem;">
+        <button type="submit" class="primary-btn">{{ t('profile_save') }}</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<section>
+  <div class="section-head"><h2>{{ t('profile_section_password') }}</h2></div>
+  <div class="panel form-panel">
+    {% if password_success %}<div class="auth-success">{{ t('profile_password_success') }}</div>{% endif %}
+    {% if password_error %}<div class="auth-error">{{ t(password_error) }}</div>{% endif %}
+    <form method="post" action="{{ url_for('main.profile_password') }}">
+      <div class="form-grid" style="grid-template-columns: repeat(3, 1fr);">
+        <div class="field">
+          <label for="current_password">{{ t('profile_current_password') }}</label>
+          <input type="password" id="current_password" name="current_password" required>
+        </div>
+        <div class="field">
+          <label for="new_password">{{ t('profile_new_password') }}</label>
+          <input type="password" id="new_password" name="new_password" minlength="8" required>
+        </div>
+        <div class="field">
+          <label for="new_password2">{{ t('profile_new_password2') }}</label>
+          <input type="password" id="new_password2" name="new_password2" minlength="8" required>
+        </div>
+      </div>
+      <div style="margin-top: 0.8rem;">
+        <button type="submit" class="primary-btn">{{ t('profile_save') }}</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<section>
+  <div class="section-head"><h2>{{ t('profile_section_email') }}</h2></div>
+  <div class="panel form-panel">
+    {% if verification_sent %}<div class="auth-success">{{ t('profile_verification_sent') }}</div>{% endif %}
+    {% if not mail_configured %}
+      <p class="empty" style="padding: 0.5rem 0; text-align: left;">{{ t('profile_email_disabled') }}</p>
+    {% elif current_user.email_verified %}
+      <p>{{ t('profile_email_verified') }}</p>
+    {% else %}
+      <p style="margin-bottom: 0.8rem;">{{ t('profile_email_not_verified') }}</p>
+      <form method="post" action="{{ url_for('main.resend_verification') }}">
+        <button type="submit" class="primary-btn">{{ t('profile_resend_verification') }}</button>
+      </form>
+    {% endif %}
+  </div>
+</section>
+
+<section>
+  <div class="section-head"><h2>{{ t('profile_section_export') }}</h2></div>
+  <div class="panel form-panel" style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+    <a class="pill-btn" href="{{ url_for('main.profile_export_applications') }}">⬇ {{ t('profile_export_applications') }}</a>
+    <a class="pill-btn" href="{{ url_for('main.profile_export_jobs') }}">⬇ {{ t('profile_export_jobs') }}</a>
+  </div>
+</section>
+
+<section>
+  <div class="section-head"><h2>{{ t('profile_section_danger') }}</h2></div>
+  <div class="panel form-panel">
+    {% if delete_error %}<div class="auth-error">{{ t(delete_error) }}</div>{% endif %}
+    <p style="color: var(--bad); font-size: 0.86rem; margin-top: 0;">{{ t('profile_delete_warning') }}</p>
+    <form method="post" action="{{ url_for('main.profile_delete') }}" onsubmit="return confirm('{{ t('profile_delete_warning') }}');">
+      <div class="field" style="max-width: 320px;">
+        <label for="delete_password">{{ t('profile_delete_password_label') }}</label>
+        <input type="password" id="delete_password" name="password" required>
+      </div>
+      <div style="margin-top: 0.8rem;">
+        <button type="submit" class="danger-btn" style="padding: 0.5rem 1rem;">{{ t('profile_delete_submit') }}</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<footer class="foot">{{ t('footer_text') }}</footer>
+{% endblock %}

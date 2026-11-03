@@ -6,8 +6,8 @@
   <div class="toolbar">
     <button type="button" class="theme-btn" onclick="toggleTheme()">🌓 {{ t('theme_toggle') }}</button>
     <span class="lang-switch">
-      <a href="{{ url_for('set_lang', lang_code='tr') }}" class="{{ 'active' if lang == 'tr' else '' }}">TR</a>
-      <a href="{{ url_for('set_lang', lang_code='en') }}" class="{{ 'active' if lang == 'en' else '' }}">EN</a>
+      <a href="{{ url_for('main.set_lang', lang_code='tr') }}" class="{{ 'active' if lang == 'tr' else '' }}">TR</a>
+      <a href="{{ url_for('main.set_lang', lang_code='en') }}" class="{{ 'active' if lang == 'en' else '' }}">EN</a>
     </span>
   </div>
 </header>
@@ -20,24 +20,31 @@
   <div class="auth-success">{{ t('register_success') }}</div>
   {% endif %}
   {% if error %}
-  <div class="auth-error">{{ error }}</div>
+  <div class="auth-error">{{ t(error) }}</div>
   {% endif %}
 
-  <form method="post" action="{{ url_for('login') }}">
+  <form method="post" action="{{ url_for('main.login') }}">
     <div class="auth-field">
-      <label for="username">{{ t('login_username') }}</label>
-      <input type="text" id="username" name="username" required autofocus>
+      <label for="identifier">{{ t('login_identifier') }}</label>
+      <input type="text" id="identifier" name="identifier" required autofocus>
     </div>
     <div class="auth-field">
       <label for="password">{{ t('login_password') }}</label>
       <input type="password" id="password" name="password" required>
     </div>
+    <div class="auth-field" style="flex-direction: row; align-items: center; gap: 0.5rem;">
+      <input type="checkbox" id="remember" name="remember" style="width: auto;">
+      <label for="remember" style="margin: 0;">{{ t('login_remember') }}</label>
+    </div>
     <button type="submit" class="primary-btn full-btn">{{ t('login_submit') }}</button>
   </form>
 
   <div class="auth-switch">
+    <a href="{{ url_for('main.forgot_password') }}">{{ t('login_forgot_link') }}</a>
+  </div>
+  <div class="auth-switch">
     {{ t('login_no_account') }}
-    <a href="{{ url_for('register') }}">{{ t('login_register_link') }}</a>
+    <a href="{{ url_for('main.register') }}">{{ t('login_register_link') }}</a>
   </div>
 </div>
 {% endblock %}

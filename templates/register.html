@@ -6,8 +6,8 @@
   <div class="toolbar">
     <button type="button" class="theme-btn" onclick="toggleTheme()">🌓 {{ t('theme_toggle') }}</button>
     <span class="lang-switch">
-      <a href="{{ url_for('set_lang', lang_code='tr') }}" class="{{ 'active' if lang == 'tr' else '' }}">TR</a>
-      <a href="{{ url_for('set_lang', lang_code='en') }}" class="{{ 'active' if lang == 'en' else '' }}">EN</a>
+      <a href="{{ url_for('main.set_lang', lang_code='tr') }}" class="{{ 'active' if lang == 'tr' else '' }}">TR</a>
+      <a href="{{ url_for('main.set_lang', lang_code='en') }}" class="{{ 'active' if lang == 'en' else '' }}">EN</a>
     </span>
   </div>
 </header>
@@ -17,25 +17,86 @@
   <p class="sub">{{ t('app_subtitle') }}</p>
 
   {% if error %}
-  <div class="auth-error">{{ error }}</div>
+  <div class="auth-error">{{ t(error) }}</div>
   {% endif %}
 
-  <form method="post" action="{{ url_for('register') }}">
+  <form method="post" action="{{ url_for('main.register') }}">
+    <div class="auth-field">
+      <label for="full_name">{{ t('register_full_name') }}</label>
+      <input type="text" id="full_name" name="full_name" value="{{ form.full_name }}" required autofocus>
+    </div>
+    <div class="auth-field">
+      <label for="email">{{ t('register_email') }}</label>
+      <input type="email" id="email" name="email" value="{{ form.email }}" required>
+    </div>
     <div class="auth-field">
       <label for="username">{{ t('register_username') }}</label>
-      <input type="text" id="username" name="username" required autofocus>
+      <input type="text" id="username" name="username" value="{{ form.username }}" required>
     </div>
     <div class="auth-field">
       <label for="password">{{ t('register_password') }}</label>
-      <input type="password" id="password" name="password" minlength="6" required>
-      <span class="hint">{{ t('register_password_hint') }}</span>
+      <input type="password" id="password" name="password" minlength="8" required oninput="updateStrength()">
+      <div style="height: 5px; border-radius: 3px; overflow: hidden; background: var(--border);">
+        <div id="strength-bar" style="height: 100%; width: 0%; background: var(--bad); transition: width 0.15s, background 0.15s;"></div>
+      </div>
+      <span class="hint" id="strength-label">{{ t('register_password_hint') }}</span>
     </div>
+    <div class="auth-field">
+      <label for="password2">{{ t('register_password2') }}</label>
+      <input type="password" id="password2" name="password2" minlength="8" required>
+    </div>
+    <div class="auth-field">
+      <label for="target_position">{{ t('register_target_position') }}</label>
+      <input type="text" id="target_position" name="target_position" value="{{ form.target_position }}" placeholder="{{ t('register_target_position_placeholder') }}">
+    </div>
+    <div class="auth-field">
+      <label for="city_preference">{{ t('register_city') }}</label>
+      <input type="text" id="city_preference" name="city_preference" value="{{ form.city_preference }}">
+    </div>
+
+    <details style="margin-bottom: 0.9rem; font-size: 0.8rem; color: var(--muted);">
+      <summary style="cursor: pointer; color: var(--accent); font-weight: 600;">{{ t('register_kvkk_link') }}</summary>
+      <p style="margin-top: 0.5rem; line-height: 1.5;">{{ t('kvkk_notice_body') }}</p>
+    </details>
+    <div class="auth-field" style="flex-direction: row; align-items: flex-start; gap: 0.5rem;">
+      <input type="checkbox" id="kvkk_accept" name="kvkk_accept" style="width: auto; margin-top: 0.2rem;" required>
+      <label for="kvkk_accept" style="margin: 0; font-weight: 400;">{{ t('register_kvkk_label') }}</label>
+    </div>
+
     <button type="submit" class="primary-btn full-btn">{{ t('register_submit') }}</button>
   </form>
 
   <div class="auth-switch">
     {{ t('register_have_account') }}
-    <a href="{{ url_for('login') }}">{{ t('register_login_link') }}</a>
+    <a href="{{ url_for('main.login') }}">{{ t('register_login_link') }}</a>
   </div>
 </div>
+
+<script>
+  function updateStrength() {
+    var pw = document.getElementById('password').value;
+    var bar = document.getElementById('strength-bar');
+    var label = document.getElementById('strength-label');
+    var score = 0;
+    if (pw.length >= 8) score++;
+    if (pw.length >= 12) score++;
+    if (/[a-z]/.test(pw) && /[A-Z]/.test(pw)) score++;
+    if (/\d/.test(pw)) score++;
+    if (/[^A-Za-z0-9]/.test(pw)) score++;
+
+    var pct = Math.min(100, (score / 5) * 100);
+    var color = 'var(--bad)';
+    var text = {{ t('register_strength_weak')|tojson }};
+    if (score >= 4) {
+      color = 'var(--ok)';
+      text = {{ t('register_strength_strong')|tojson }};
+    } else if (score >= 2) {
+      color = 'var(--warn)';
+      text = {{ t('register_strength_medium')|tojson }};
+    }
+    bar.style.width = pct + '%';
+    bar.style.background = color;
+    label.textContent = pw ? text : {{ t('register_password_hint')|tojson }};
+  }
+</script>
 {% endblock %}
