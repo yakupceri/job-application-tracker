@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block body %}
+<header class="top">
+  <div class="spacer"></div>
+  <div class="toolbar">
+    <button type="button" class="theme-btn" onclick="toggleTheme()">🌓 {{ t('theme_toggle') }}</button>
+    <span class="lang-switch">
+      <a href="{{ url_for('main.set_lang', lang_code='tr') }}" class="{{ 'active' if lang == 'tr' else '' }}">TR</a>
+      <a href="{{ url_for('main.set_lang', lang_code='en') }}" class="{{ 'active' if lang == 'en' else '' }}">EN</a>
+    </span>
+    <a class="pill-btn" href="{{ url_for('main.profile') }}">{{ t('gmail_review_back') }}</a>
+  </div>
+</header>
+
+<h1 style="margin-bottom: 0.3rem;">{{ t('gmail_review_heading') }}</h1>
+<p style="color: var(--muted); margin-top: 0; margin-bottom: 1.2rem;">{{ t('gmail_review_subtitle') }}</p>
+
+{% if not candidates %}
+<div class="panel"><p class="empty">{{ t('gmail_review_empty') }}</p></div>
+{% else %}
+<form method="post" action="{{ url_for('main.gmail_import') }}">
+  <div class="panel table-wrap">
+    <table class="grid">
+      <thead>
+        <tr>
+          <th class="no-sort"></th>
+          <th class="no-sort">{{ t('th_company') }}</th>
+          <th class="no-sort">{{ t('th_position') }}</th>
+          <th class="no-sort">{{ t('th_date') }}</th>
+          <th class="no-sort">{{ t('th_channel') }}</th>
+          <th class="no-sort">{{ t('gmail_review_subject') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in candidates %}
+        <tr>
+          <td><input type="checkbox" name="include_{{ loop.index0 }}" checked></td>
+          <td><input type="text" class="cell-input" name="company_{{ loop.index0 }}" value="{{ c.company }}" required></td>
+          <td><input type="text" class="cell-input" name="position_{{ loop.index0 }}" value="{{ c.position }}" placeholder="{{ t('field_position') }}" required></td>
+          <td><input type="date" class="cell-input" name="applied_date_{{ loop.index0 }}" value="{{ c.applied_date }}" required></td>
+          <td>
+            <select class="cell-select" name="channel_{{ loop.index0 }}">
+              {% for ch in valid_channels %}
+              <option value="{{ ch }}" {% if ch == c.channel %}selected{% endif %}>{{ t('channel_' + ch) }}</option>
+              {% endfor %}
+            </select>
+          </td>
+          <td class="note">{{ c.subject }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div style="margin-top: 1rem;">
+    <button type="submit" class="primary-btn">{{ t('gmail_review_import_btn') }}</button>
+  </div>
+</form>
+{% endif %}
+
+<footer class="foot">{{ t('footer_text') }}</footer>
+{% endblock %}

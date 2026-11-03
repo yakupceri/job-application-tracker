@@ -6,7 +6,14 @@ flask-login==0.6.3
 argon2-cffi==23.1.0
 python-dotenv==1.0.1
 email-validator==2.2.0
+cryptography==50.0.2
 
 # Only required in production when DATABASE_URL points at PostgreSQL.
 # Safe to leave installed in dev; unused when running on SQLite.
 psycopg2-binary==2.9.10
+
+# Gmail import (optional feature -- see gmail_integration.py). Unused, but
+# safe to leave installed, when GOOGLE_CLIENT_ID/SECRET aren't configured.
+google-auth==2.62.1
+google-auth-oauthlib==1.5.0
+google-api-python-client==2.201.0

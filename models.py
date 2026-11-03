@@ -55,7 +55,16 @@ class User(UserMixin, db.Model):
     failed_login_count = db.Column(db.Integer, nullable=False, default=0)
     locked_until = db.Column(db.DateTime, nullable=True)
 
+    is_demo = db.Column(db.Boolean, nullable=False, default=False)
+
+    gmail_email = db.Column(db.String(255), nullable=True)
+    gmail_refresh_token = db.Column(db.Text, nullable=True)
+
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    @property
+    def gmail_connected(self) -> bool:
+        return self.gmail_refresh_token is not None
 
     applications = db.relationship(
         "Application", backref="user", cascade="all, delete-orphan", lazy="dynamic"

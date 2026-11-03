@@ -101,6 +101,43 @@
   </div>
 </section>
 
+{% if not current_user.is_demo %}
+<section>
+  <div class="section-head"><h2>{{ t('profile_section_gmail') }}</h2></div>
+  <div class="panel form-panel">
+    {% if gmail_error %}<div class="auth-error">{{ t(gmail_error) }}</div>{% endif %}
+    {% if not gmail_oauth_configured %}
+      <p class="empty" style="padding: 0.5rem 0; text-align: left;">{{ t('gmail_not_configured') }}</p>
+    {% elif current_user.gmail_connected %}
+      <p style="margin-bottom: 0.8rem;">{{ t('gmail_connected_as') }}: <strong>{{ current_user.gmail_email }}</strong></p>
+      <div style="display: flex; gap: 0.6rem; flex-wrap: wrap;">
+        <a class="primary-btn" href="{{ url_for('main.gmail_scan') }}">{{ t('gmail_scan_btn') }}</a>
+        <form method="post" action="{{ url_for('main.gmail_disconnect') }}">
+          <button type="submit" class="danger-btn" style="padding: 0.5rem 1rem;">{{ t('gmail_disconnect_btn') }}</button>
+        </form>
+      </div>
+    {% else %}
+      <a class="primary-btn" href="{{ url_for('main.gmail_connect') }}">{{ t('gmail_connect_btn') }}</a>
+    {% endif %}
+  </div>
+</section>
+
+<section>
+  <div class="section-head"><h2>{{ t('profile_section_import') }}</h2></div>
+  <div class="panel form-panel">
+    {% if import_result %}
+    <div class="auth-success">{{ t('profile_import_result').format(imported=import_result.imported, skipped=import_result.skipped) }}</div>
+    {% endif %}
+    {% if import_error %}<div class="auth-error">{{ t(import_error) }}</div>{% endif %}
+    <p class="hint" style="margin-bottom: 0.8rem;">{{ t('profile_import_hint') }}</p>
+    <form method="post" action="{{ url_for('main.profile_import_applications') }}" enctype="multipart/form-data" style="display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;">
+      <input type="file" name="csv_file" accept=".csv,text/csv" required>
+      <button type="submit" class="primary-btn">{{ t('profile_import_submit') }}</button>
+    </form>
+  </div>
+</section>
+{% endif %}
+
 <section>
   <div class="section-head"><h2>{{ t('profile_section_danger') }}</h2></div>
   <div class="panel form-panel">

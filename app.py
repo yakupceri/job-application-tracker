@@ -42,6 +42,8 @@ import functools
 import hmac
 import io
 import os
+import secrets
+import uuid
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import func
@@ -63,6 +65,7 @@ from flask_login import current_user, login_required, login_user, logout_user
 from flask_migrate import upgrade as migrate_upgrade
 
 import email_utils
+import gmail_integration
 import jobs
 import tracker
 from extensions import db, login_manager, migrate
@@ -369,6 +372,59 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tr": "Bu doğrulama bağlantısı geçersiz veya süresi dolmuş.",
         "en": "This verification link is invalid or has expired.",
     },
+
+    "profile_section_import": {"tr": "CSV'den başvuru içe aktar", "en": "Import applications from CSV"},
+    "profile_import_hint": {
+        "tr": "Sütunlar: company, position, applied_date (YYYY-MM-DD), channel (email/kariyer.net/linkedin), note (opsiyonel), status (opsiyonel).",
+        "en": "Columns: company, position, applied_date (YYYY-MM-DD), channel (email/kariyer.net/linkedin), note (optional), status (optional).",
+    },
+    "profile_import_submit": {"tr": "Dosyayı yükle", "en": "Upload file"},
+    "profile_import_no_file": {"tr": "Bir CSV dosyası seç.", "en": "Choose a CSV file."},
+    "profile_import_bad_encoding": {
+        "tr": "Dosya okunamadı. UTF-8 kodlamasında bir CSV dosyası olduğundan emin ol.",
+        "en": "Couldn't read the file. Make sure it's a UTF-8 encoded CSV.",
+    },
+    "profile_import_result": {
+        "tr": "{imported} başvuru içe aktarıldı, {skipped} satır atlandı.",
+        "en": "{imported} applications imported, {skipped} rows skipped.",
+    },
+
+    "profile_section_gmail": {"tr": "Gmail'den içe aktar", "en": "Import from Gmail"},
+    "gmail_not_configured": {
+        "tr": "Bu özellik şu anda kapalı (Google OAuth ayarlanmamış).",
+        "en": "This feature is currently disabled (Google OAuth not configured).",
+    },
+    "gmail_connect_btn": {"tr": "Gmail hesabını bağla", "en": "Connect Gmail account"},
+    "gmail_connected_as": {"tr": "Bağlı hesap", "en": "Connected account"},
+    "gmail_scan_btn": {"tr": "Eski başvuruları tara", "en": "Scan for past applications"},
+    "gmail_disconnect_btn": {"tr": "Bağlantıyı kes", "en": "Disconnect"},
+    "gmail_error_state": {
+        "tr": "Google bağlantısı doğrulanamadı, lütfen tekrar dene.",
+        "en": "Couldn't verify the Google connection, please try again.",
+    },
+    "gmail_error_connect": {
+        "tr": "Gmail hesabına bağlanırken bir hata oluştu, lütfen tekrar dene.",
+        "en": "Something went wrong connecting your Gmail account, please try again.",
+    },
+    "gmail_error_scan": {
+        "tr": "Gmail taranırken bir hata oluştu. Bağlantının hâlâ geçerli olduğundan emin ol.",
+        "en": "Something went wrong scanning Gmail. Make sure the connection is still valid.",
+    },
+
+    "gmail_review_heading": {"tr": "Bulunan başvurular", "en": "Found applications"},
+    "gmail_review_subtitle": {
+        "tr": "Hiçbiri otomatik kaydedilmedi. İstediğini düzenle, işaretle ve içe aktar.",
+        "en": "Nothing is saved yet. Edit, check the ones you want, and import.",
+    },
+    "gmail_review_empty": {
+        "tr": "Gmail'inde buna benzer bir e-posta bulunamadı.",
+        "en": "No matching emails were found in your Gmail.",
+    },
+    "gmail_review_import_btn": {"tr": "Seçilenleri içe aktar", "en": "Import selected"},
+    "gmail_review_subject": {"tr": "E-posta konusu", "en": "Email subject"},
+    "gmail_review_back": {"tr": "Vazgeç", "en": "Cancel"},
+
+    "login_try_demo": {"tr": "Demoyu dene →", "en": "Try the demo →"},
 }
 
 
@@ -389,6 +445,7 @@ def _inject_i18n():
         "t": t,
         "lang": g.get("lang", "tr"),
         "mail_configured": email_utils.mail_is_configured(),
+        "demo_mode": current_app.config.get("DEMO_MODE", False),
     }
 
 
@@ -640,6 +697,10 @@ def profile():
         update_error=session.pop("profile_update_error", None),
         password_error=session.pop("profile_password_error", None),
         delete_error=session.pop("profile_delete_error", None),
+        import_result=session.pop("profile_import_result", None),
+        import_error=session.pop("profile_import_error", None),
+        gmail_oauth_configured=gmail_integration.gmail_oauth_configured(),
+        gmail_error=session.pop("gmail_error", None),
     )
 
 
@@ -743,6 +804,62 @@ def profile_export_jobs():
     )
 
 
+_CSV_IMPORT_COLUMNS = ("company", "position", "applied_date", "channel", "note", "status")
+
+
+@bp.route("/profile/import/applications", methods=["POST"])
+@login_required
+def profile_import_applications():
+    upload = request.files.get("csv_file")
+    if upload is None or not upload.filename:
+        session["profile_import_error"] = "profile_import_no_file"
+        return redirect(url_for("main.profile"))
+
+    try:
+        text = upload.read().decode("utf-8-sig")
+    except UnicodeDecodeError:
+        session["profile_import_error"] = "profile_import_bad_encoding"
+        return redirect(url_for("main.profile"))
+
+    reader = csv.DictReader(io.StringIO(text))
+    imported = 0
+    skipped = 0
+    for row in reader:
+        company = (row.get("company") or "").strip()
+        position = (row.get("position") or "").strip()
+        applied_date = (row.get("applied_date") or "").strip()
+        channel = (row.get("channel") or "").strip()
+        note = (row.get("note") or "").strip() or None
+        status = (row.get("status") or "").strip() or tracker.DEFAULT_STATUS
+
+        if (
+            not company
+            or not position
+            or not tracker.is_valid_date(applied_date)
+            or channel not in tracker.VALID_CHANNELS
+            or status not in tracker.VALID_STATUSES
+        ):
+            skipped += 1
+            continue
+
+        db.session.add(
+            Application(
+                company=company,
+                position=position,
+                applied_date=applied_date,
+                channel=channel,
+                note=note,
+                status=status,
+                user_id=current_user.id,
+            )
+        )
+        imported += 1
+
+    db.session.commit()
+    session["profile_import_result"] = {"imported": imported, "skipped": skipped}
+    return redirect(url_for("main.profile"))
+
+
 @bp.route("/profile/delete", methods=["POST"])
 @login_required
 def profile_delete():
@@ -756,6 +873,229 @@ def profile_delete():
     db.session.delete(user)
     db.session.commit()
     return redirect(url_for("main.login"))
+
+
+# ---------------------------------------------------------------------------
+# Gmail import -- each user connects their own Gmail (read-only OAuth) and
+# reviews/edits a best-effort list of application emails before anything is
+# saved. Degrades cleanly: with no GOOGLE_CLIENT_ID/SECRET configured, the
+# whole feature just stays hidden (see gmail_oauth_configured in profile()).
+# ---------------------------------------------------------------------------
+
+
+def _gmail_redirect_uri() -> str:
+    return request.url_root.rstrip("/") + url_for("main.gmail_callback")
+
+
+@bp.route("/gmail/connect")
+@login_required
+def gmail_connect():
+    if not gmail_integration.gmail_oauth_configured():
+        return redirect(url_for("main.profile"))
+    state = secrets.token_urlsafe(24)
+    session["gmail_oauth_state"] = state
+    auth_url = gmail_integration.build_auth_url(_gmail_redirect_uri(), state)
+    return redirect(auth_url)
+
+
+@bp.route("/gmail/callback")
+@login_required
+def gmail_callback():
+    expected_state = session.pop("gmail_oauth_state", None)
+    if not expected_state or request.args.get("state") != expected_state:
+        session["gmail_error"] = "gmail_error_state"
+        return redirect(url_for("main.profile"))
+    if "error" in request.args:
+        # The user declined the consent screen -- not an error worth logging loudly.
+        return redirect(url_for("main.profile"))
+
+    try:
+        credentials = gmail_integration.exchange_code_for_credentials(
+            _gmail_redirect_uri(), expected_state, request.url
+        )
+        connected_email = gmail_integration.fetch_connected_email(credentials)
+    except Exception:
+        session["gmail_error"] = "gmail_error_connect"
+        return redirect(url_for("main.profile"))
+
+    current_user.gmail_email = connected_email
+    current_user.gmail_refresh_token = gmail_integration.encrypt_refresh_token(
+        current_app.secret_key, credentials.refresh_token
+    )
+    db.session.commit()
+    return redirect(url_for("main.profile"))
+
+
+@bp.route("/gmail/disconnect", methods=["POST"])
+@login_required
+def gmail_disconnect():
+    current_user.gmail_email = None
+    current_user.gmail_refresh_token = None
+    db.session.commit()
+    return redirect(url_for("main.profile"))
+
+
+@bp.route("/gmail/scan")
+@login_required
+def gmail_scan():
+    if not current_user.gmail_connected:
+        return redirect(url_for("main.profile"))
+
+    refresh_token = gmail_integration.decrypt_refresh_token(
+        current_app.secret_key, current_user.gmail_refresh_token
+    )
+    if refresh_token is None:
+        session["gmail_error"] = "gmail_error_connect"
+        return redirect(url_for("main.profile"))
+
+    try:
+        credentials = gmail_integration.credentials_from_refresh_token(refresh_token)
+        candidates = gmail_integration.search_application_emails(credentials)
+    except Exception:
+        session["gmail_error"] = "gmail_error_scan"
+        return redirect(url_for("main.profile"))
+
+    session["gmail_candidates"] = [
+        {
+            "message_id": c.message_id,
+            "company": c.company,
+            "position": c.position,
+            "applied_date": c.applied_date,
+            "channel": c.channel,
+            "subject": c.subject,
+        }
+        for c in candidates
+    ]
+    return render_template(
+        "gmail_review.html",
+        candidates=session["gmail_candidates"],
+        valid_channels=tracker.VALID_CHANNELS,
+    )
+
+
+@bp.route("/gmail/import", methods=["POST"])
+@login_required
+def gmail_import():
+    candidates = session.pop("gmail_candidates", [])
+    imported = 0
+    for i, candidate in enumerate(candidates):
+        if request.form.get(f"include_{i}") != "on":
+            continue
+        company = (request.form.get(f"company_{i}") or "").strip()
+        position = (request.form.get(f"position_{i}") or "").strip()
+        applied_date = (request.form.get(f"applied_date_{i}") or "").strip()
+        channel = request.form.get(f"channel_{i}") or "email"
+
+        if not company or not position or not tracker.is_valid_date(applied_date):
+            continue
+        if channel not in tracker.VALID_CHANNELS:
+            channel = "email"
+
+        db.session.add(
+            Application(
+                company=company,
+                position=position,
+                applied_date=applied_date,
+                channel=channel,
+                note=f"Gmail'den içe aktarıldı: {candidate.get('subject', '')}"[:500] or None,
+                status=tracker.DEFAULT_STATUS,
+                user_id=current_user.id,
+            )
+        )
+        imported += 1
+
+    db.session.commit()
+    session["profile_import_result"] = {"imported": imported, "skipped": 0}
+    return redirect(url_for("main.profile"))
+
+
+# ---------------------------------------------------------------------------
+# Demo mode -- a public "try it" account, seeded with sample data, no
+# registration required. Only reachable when DEMO_MODE is enabled (see
+# create_app); otherwise login.html simply doesn't show the button.
+# ---------------------------------------------------------------------------
+
+DEMO_ACCOUNT_MAX_AGE_HOURS = 24
+
+
+def _cleanup_old_demo_accounts() -> None:
+    cutoff = datetime.utcnow() - timedelta(hours=DEMO_ACCOUNT_MAX_AGE_HOURS)
+    stale = User.query.filter(User.is_demo.is_(True), User.created_at < cutoff).all()
+    for user in stale:
+        db.session.delete(user)
+    if stale:
+        db.session.commit()
+
+
+def _seed_demo_data(user: User) -> None:
+    today = date.today()
+    sample_applications = [
+        ("Acme Yazılım", "Backend Mühendisi", -32, "email", "interview", "Referans ile başvurdum"),
+        ("Nova Teknoloji", "Full Stack Developer", -20, "linkedin", "sent", None),
+        ("Pixel Stüdyo", "Frontend Developer", -14, "kariyer.net", "followed-up", None),
+        ("Vertex AI", "Makine Öğrenmesi Mühendisi", -7, "linkedin", "sent", "Çok heyecanlıyım"),
+        ("Orion Bulut", "DevOps Mühendisi", -45, "email", "rejected", None),
+        ("Lumen Yazılım", "Backend Mühendisi", -3, "email", "offer", "Teklifi değerlendiriyorum"),
+    ]
+    for company, position, days_offset, channel, status, note in sample_applications:
+        db.session.add(
+            Application(
+                company=company,
+                position=position,
+                applied_date=(today + timedelta(days=days_offset)).isoformat(),
+                channel=channel,
+                status=status,
+                note=note,
+                user_id=user.id,
+            )
+        )
+
+    sample_jobs = [
+        ("Quark Robotik", "Backend Mühendisi", "İstanbul", "Çok uygun", "Teknoloji yığını tam uyumlu"),
+        ("Atlas Finans", "Yazılım Mühendisi", "Ankara", "Uygun", "Deneyim seviyesi yakın"),
+        ("Helix Biotek", "Veri Mühendisi", "İzmir", "Zorlama", "Sektör farklı ama ilginç"),
+    ]
+    for company, position, city, tag, reason in sample_jobs:
+        db.session.add(
+            CandidateJob(
+                company=company,
+                position=position,
+                city=city,
+                link="https://example.com/ilan",
+                reason=reason,
+                tag=tag,
+                found_date=today.isoformat(),
+                user_id=user.id,
+            )
+        )
+    db.session.commit()
+
+
+@bp.route("/demo-login", methods=["POST"])
+def demo_login():
+    if not current_app.config.get("DEMO_MODE"):
+        return redirect(url_for("main.login"))
+
+    _cleanup_old_demo_accounts()
+
+    suffix = uuid.uuid4().hex[:8]
+    demo_user = User(
+        full_name="Demo Kullanıcı",
+        email=f"demo-{suffix}@demo.local",
+        username=f"demo-{suffix}",
+        target_position="backend",
+        city_preference="İstanbul",
+        kvkk_accepted_at=datetime.utcnow(),
+        email_verified=True,
+        is_demo=True,
+    )
+    demo_user.set_password(secrets.token_urlsafe(32))
+    db.session.add(demo_user)
+    db.session.commit()
+
+    _seed_demo_data(demo_user)
+    login_user(demo_user)
+    return redirect(url_for("main.index"))
 
 
 # ---------------------------------------------------------------------------
@@ -1200,6 +1540,10 @@ def create_app(test_config: dict | None = None) -> Flask:
         "OWNER_TARGET_POSITION", os.environ.get("OWNER_TARGET_POSITION", "")
     )
     app.config["OWNER_CITY"] = cfg.get("OWNER_CITY", os.environ.get("OWNER_CITY", ""))
+
+    app.config["DEMO_MODE"] = cfg.get(
+        "DEMO_MODE", os.environ.get("DEMO_MODE", "false").lower() == "true"
+    )
 
     secure_cookies = cfg.get(
         "SESSION_COOKIE_SECURE",
