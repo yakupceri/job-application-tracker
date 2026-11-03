@@ -186,6 +186,16 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "tr": "Bu başvuruyu silmek istediğine emin misin?",
         "en": "Are you sure you want to delete this application?",
     },
+    "confirm_dismiss": {
+        "tr": "Bu ilanı listenden kaldırmak istediğine emin misin?",
+        "en": "Remove this lead from your list?",
+    },
+    "btn_dismiss": {"tr": "Kaldır", "en": "Dismiss"},
+    "grid_search_placeholder": {"tr": "Ara...", "en": "Search..."},
+    "grid_filter_all": {"tr": "Tümü", "en": "All"},
+    "grid_new_row_hint": {"tr": "+ Yeni satır: alanları doldur, Enter'a bas", "en": "+ New row: fill in the fields, press Enter"},
+    "grid_edit_hint": {"tr": "Düzenlemek için bir hücreye çift tıkla", "en": "Double-click a cell to edit it"},
+    "grid_no_results": {"tr": "Eşleşen kayıt yok.", "en": "No matching records."},
 
     "theme_toggle": {"tr": "Tema", "en": "Theme"},
 
@@ -735,6 +745,23 @@ def profile_delete():
 # ---------------------------------------------------------------------------
 
 
+def _wants_json() -> bool:
+    """True for the fetch()-driven Excel-style grid, False for a plain form POST."""
+    return request.headers.get("X-Requested-With") == "fetch"
+
+
+def _application_to_dict(a: Application) -> dict:
+    return {
+        "id": a.id,
+        "company": a.company,
+        "position": a.position,
+        "applied_date": a.applied_date,
+        "channel": a.channel,
+        "status": a.status,
+        "note": a.note or "",
+    }
+
+
 @bp.route("/")
 @login_required
 def index():
@@ -761,42 +788,85 @@ def index():
 @bp.route("/applications", methods=["POST"])
 @login_required
 def create_application():
-    company = request.form.get("company", "")
-    position = request.form.get("position", "")
+    company = (request.form.get("company") or "").strip()
+    position = (request.form.get("position") or "").strip()
     applied_date = request.form.get("applied_date", "")
     channel = request.form.get("channel", "")
     note = request.form.get("note") or None
 
-    if (
+    valid = (
         company
         and position
         and tracker.is_valid_date(applied_date)
         and channel in tracker.VALID_CHANNELS
-    ):
-        db.session.add(
-            Application(
-                company=company,
-                position=position,
-                applied_date=applied_date,
-                channel=channel,
-                note=note,
-                status=tracker.DEFAULT_STATUS,
-                user_id=current_user.id,
-            )
+    )
+    application = None
+    if valid:
+        application = Application(
+            company=company,
+            position=position,
+            applied_date=applied_date,
+            channel=channel,
+            note=note,
+            status=tracker.DEFAULT_STATUS,
+            user_id=current_user.id,
         )
+        db.session.add(application)
         db.session.commit()
+
+    if _wants_json():
+        if application is None:
+            return jsonify({"ok": False, "error": "invalid_row"}), 400
+        return jsonify({"ok": True, "application": _application_to_dict(application)})
     return redirect(url_for("main.index"))
+
+
+# Fields the Excel-style grid can edit in place (double-click a cell).
+# "status" and "note" deliberately excluded here: status has its own
+# dropdown-backed endpoint below, and note is free text with no validation
+# to fail, so it's handled inline the same way but listed for clarity.
+_EDITABLE_APPLICATION_FIELDS = {"company", "position", "applied_date", "channel", "note"}
+
+
+@bp.route("/applications/<int:app_id>/update", methods=["POST"])
+@login_required
+def update_application(app_id: int):
+    application = Application.query.filter_by(id=app_id, user_id=current_user.id).first()
+    if application is None:
+        return jsonify({"ok": False, "error": "not_found"}), 404
+
+    payload = request.get_json(silent=True) or {}
+    field = payload.get("field")
+    value = (payload.get("value") or "").strip()
+
+    if field not in _EDITABLE_APPLICATION_FIELDS:
+        return jsonify({"ok": False, "error": "invalid_field"}), 400
+
+    if field in ("company", "position") and not value:
+        return jsonify({"ok": False, "error": "required"}), 400
+    if field == "applied_date" and not tracker.is_valid_date(value):
+        return jsonify({"ok": False, "error": "invalid_date"}), 400
+    if field == "channel" and value not in tracker.VALID_CHANNELS:
+        return jsonify({"ok": False, "error": "invalid_channel"}), 400
+
+    setattr(application, field, value or None if field == "note" else value)
+    db.session.commit()
+    return jsonify({"ok": True, "value": getattr(application, field) or ""})
 
 
 @bp.route("/applications/<int:app_id>/status", methods=["POST"])
 @login_required
 def set_application_status(app_id: int):
-    new_status = request.form.get("status", "")
+    new_status = request.form.get("status") or (request.get_json(silent=True) or {}).get("status", "")
     application = Application.query.filter_by(id=app_id, user_id=current_user.id).first()
     if application is None or new_status not in tracker.VALID_STATUSES:
+        if _wants_json():
+            return jsonify({"ok": False, "error": "invalid"}), 404
         return Response("No such application.", 404)
     application.status = new_status
     db.session.commit()
+    if _wants_json():
+        return jsonify({"ok": True, "status": new_status})
     return redirect(url_for("main.index"))
 
 
@@ -805,9 +875,13 @@ def set_application_status(app_id: int):
 def delete_application(app_id: int):
     application = Application.query.filter_by(id=app_id, user_id=current_user.id).first()
     if application is None:
+        if _wants_json():
+            return jsonify({"ok": False, "error": "not_found"}), 404
         return Response("No such application.", 404)
     db.session.delete(application)
     db.session.commit()
+    if _wants_json():
+        return jsonify({"ok": True})
     return redirect(url_for("main.index"))
 
 
@@ -816,6 +890,8 @@ def delete_application(app_id: int):
 def apply(candidate_id: int):
     candidate = CandidateJob.query.filter_by(id=candidate_id, user_id=current_user.id).first()
     if candidate is None:
+        if _wants_json():
+            return jsonify({"ok": False, "error": "not_found"}), 404
         return Response("No such candidate job.", 404)
 
     channel = jobs._infer_channel(candidate.link)
@@ -825,19 +901,35 @@ def apply(candidate_id: int):
     if candidate.reason:
         note_parts.append(candidate.reason)
 
-    db.session.add(
-        Application(
-            company=candidate.company,
-            position=candidate.position,
-            applied_date=datetime.utcnow().date().isoformat(),
-            channel=channel,
-            note=" | ".join(note_parts) or None,
-            status=tracker.DEFAULT_STATUS,
-            user_id=current_user.id,
-        )
+    new_application = Application(
+        company=candidate.company,
+        position=candidate.position,
+        applied_date=datetime.utcnow().date().isoformat(),
+        channel=channel,
+        note=" | ".join(note_parts) or None,
+        status=tracker.DEFAULT_STATUS,
+        user_id=current_user.id,
     )
+    db.session.add(new_application)
     db.session.delete(candidate)
     db.session.commit()
+    if _wants_json():
+        return jsonify({"ok": True, "application": _application_to_dict(new_application)})
+    return redirect(url_for("main.index"))
+
+
+@bp.route("/jobs/<int:candidate_id>/delete", methods=["POST"])
+@login_required
+def dismiss_candidate_job(candidate_id: int):
+    candidate = CandidateJob.query.filter_by(id=candidate_id, user_id=current_user.id).first()
+    if candidate is None:
+        if _wants_json():
+            return jsonify({"ok": False, "error": "not_found"}), 404
+        return Response("No such candidate job.", 404)
+    db.session.delete(candidate)
+    db.session.commit()
+    if _wants_json():
+        return jsonify({"ok": True})
     return redirect(url_for("main.index"))
 
 

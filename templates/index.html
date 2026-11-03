@@ -24,152 +24,485 @@
 
 <div class="stats-row">
   <div class="stat">
-    <div class="num">{{ applications|length }}</div>
+    <div class="num" id="stat-applications">{{ applications|length }}</div>
     <div class="label">{{ t('stat_applications') }}</div>
   </div>
   <div class="stat accent-ok">
-    <div class="num">{{ candidate_jobs|selectattr('tag', 'equalto', 'Çok uygun')|list|length }}</div>
+    <div class="num" id="stat-great-jobs">{{ candidate_jobs|selectattr('tag', 'equalto', 'Çok uygun')|list|length }}</div>
     <div class="label">{{ t('stat_great_jobs') }}</div>
   </div>
   <div class="stat accent-warn">
-    <div class="num">{{ candidate_jobs|length }}</div>
+    <div class="num" id="stat-candidate-jobs">{{ candidate_jobs|length }}</div>
     <div class="label">{{ t('stat_candidate_jobs') }}</div>
   </div>
 </div>
 
 <section>
   <div class="section-head">
-    <h2>{{ t('section_add_application') }}</h2>
-  </div>
-  <div class="panel form-panel">
-    <form method="post" action="{{ url_for('main.create_application') }}">
-      <div class="form-grid">
-        <div class="field">
-          <label for="company">{{ t('field_company') }}</label>
-          <input type="text" id="company" name="company" required>
-        </div>
-        <div class="field">
-          <label for="position">{{ t('field_position') }}</label>
-          <input type="text" id="position" name="position" required>
-        </div>
-        <div class="field">
-          <label for="applied_date">{{ t('field_date') }}</label>
-          <input type="date" id="applied_date" name="applied_date" required>
-        </div>
-        <div class="field">
-          <label for="channel">{{ t('field_channel') }}</label>
-          <select id="channel" name="channel" required>
-            {% for c in valid_channels %}
-            <option value="{{ c }}">{{ t('channel_' + c) }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="field">
-          <label for="note">{{ t('field_note') }}</label>
-          <input type="text" id="note" name="note">
-        </div>
-      </div>
-      <div style="margin-top: 0.8rem;">
-        <button type="submit" class="primary-btn">{{ t('btn_add') }}</button>
-      </div>
-    </form>
-  </div>
-</section>
-
-<section>
-  <div class="section-head">
     <h2>{{ t('section_my_applications') }}</h2>
-    <span class="count">{{ applications|length }} {{ t('count_records') }}</span>
+    <span class="count"><span id="applications-count">{{ applications|length }}</span> {{ t('count_records') }}</span>
   </div>
+
+  <div class="grid-toolbar">
+    <input type="search" class="grid-search" id="applications-search" placeholder="{{ t('grid_search_placeholder') }}">
+    <span class="grid-count">{{ t('grid_edit_hint') }}</span>
+  </div>
+
   <div class="panel table-wrap">
-    {% if applications %}
-    <table>
+    <table class="grid" id="applications-grid">
       <thead>
         <tr>
-          <th>{{ t('th_company') }}</th>
-          <th>{{ t('th_position') }}</th>
-          <th>{{ t('th_date') }}</th>
-          <th>{{ t('th_channel') }}</th>
-          <th>{{ t('th_status') }}</th>
-          <th>{{ t('th_note') }}</th>
-          <th>{{ t('th_actions') }}</th>
+          <th data-sort="company" data-type="text">{{ t('th_company') }}<span class="sort-arrow">▲</span></th>
+          <th data-sort="position" data-type="text">{{ t('th_position') }}<span class="sort-arrow">▲</span></th>
+          <th data-sort="date" data-type="date">{{ t('th_date') }}<span class="sort-arrow">▲</span></th>
+          <th data-sort="channel" data-type="text">{{ t('th_channel') }}<span class="sort-arrow">▲</span></th>
+          <th data-sort="status" data-type="text">{{ t('th_status') }}<span class="sort-arrow">▲</span></th>
+          <th class="no-sort">{{ t('th_note') }}</th>
+          <th class="no-sort">{{ t('th_actions') }}</th>
+        </tr>
+        <tr class="filter-row">
+          <th><input type="text" data-filter="company" placeholder="{{ t('grid_filter_all') }}"></th>
+          <th><input type="text" data-filter="position" placeholder="{{ t('grid_filter_all') }}"></th>
+          <th></th>
+          <th>
+            <select data-filter="channel">
+              <option value="">{{ t('grid_filter_all') }}</option>
+              {% for c in valid_channels %}<option value="{{ c }}">{{ t('channel_' + c) }}</option>{% endfor %}
+            </select>
+          </th>
+          <th>
+            <select data-filter="status">
+              <option value="">{{ t('grid_filter_all') }}</option>
+              {% for s in valid_statuses %}<option value="{{ s }}">{{ t('status_' + s|replace('-', '_')) }}</option>{% endfor %}
+            </select>
+          </th>
+          <th></th>
+          <th></th>
         </tr>
       </thead>
-      <tbody>
+      <tbody id="applications-body">
         {% for a in applications %}
-        <tr>
-          <td class="company">{{ a.company }}</td>
-          <td>{{ a.position }}</td>
-          <td>{{ a.applied_date }}</td>
-          <td>{{ t('channel_' + a.channel) }}</td>
+        <tr data-id="{{ a.id }}" data-company="{{ a.company }}" data-position="{{ a.position }}" data-date="{{ a.applied_date }}" data-channel="{{ a.channel }}" data-status="{{ a.status }}" data-note="{{ a.note or '' }}">
+          <td class="cell-editable" data-field="company" data-type="text">{{ a.company }}</td>
+          <td class="cell-editable" data-field="position" data-type="text">{{ a.position }}</td>
+          <td class="cell-editable" data-field="applied_date" data-type="date">{{ a.applied_date }}</td>
+          <td class="cell-editable" data-field="channel" data-type="select">{{ t('channel_' + a.channel) }}</td>
           <td>
-            {% set s = a.status %}
-            <span class="pill pill-{{ s }}">{{ t('status_' + s|replace('-', '_')) }}</span>
+            <select class="status-select" data-role="status-select">
+              {% for st in valid_statuses %}
+              <option value="{{ st }}" {% if st == a.status %}selected{% endif %}>{{ t('status_' + st|replace('-', '_')) }}</option>
+              {% endfor %}
+            </select>
           </td>
-          <td class="note">{{ a.note or '' }}</td>
+          <td class="cell-editable note" data-field="note" data-type="text">{{ a.note or '' }}</td>
           <td>
-            <div class="row-actions">
-              <form method="post" action="{{ url_for('main.set_application_status', app_id=a.id) }}">
-                <select name="status" class="status-select" onchange="this.form.submit()">
-                  {% for st in valid_statuses %}
-                  <option value="{{ st }}" {% if st == s %}selected{% endif %}>{{ t('status_' + st|replace('-', '_')) }}</option>
-                  {% endfor %}
-                </select>
-              </form>
-              <form method="post" action="{{ url_for('main.delete_application', app_id=a.id) }}" onsubmit="return confirm('{{ t('confirm_delete') }}');">
-                <button type="submit" class="danger-btn">{{ t('btn_delete') }}</button>
-              </form>
-            </div>
+            <button type="button" class="danger-btn" data-role="delete-application">{{ t('btn_delete') }}</button>
           </td>
         </tr>
         {% endfor %}
+        <tr class="new-row">
+          <td><input type="text" class="cell-input" data-new="company" placeholder="{{ t('field_company') }}"></td>
+          <td><input type="text" class="cell-input" data-new="position" placeholder="{{ t('field_position') }}"></td>
+          <td><input type="date" class="cell-input" data-new="applied_date"></td>
+          <td>
+            <select class="cell-select" data-new="channel">
+              {% for c in valid_channels %}<option value="{{ c }}">{{ t('channel_' + c) }}</option>{% endfor %}
+            </select>
+          </td>
+          <td></td>
+          <td><input type="text" class="cell-input" data-new="note" placeholder="{{ t('field_note') }}"></td>
+          <td><button type="button" class="primary-btn" data-role="add-application">{{ t('btn_add') }}</button></td>
+        </tr>
       </tbody>
     </table>
-    {% else %}
-    <p class="empty">{{ t('empty_applications') }}</p>
-    {% endif %}
+    <p class="empty" id="applications-empty" style="display:none;">{{ t('grid_no_results') }}</p>
   </div>
 </section>
 
 <section>
   <div class="section-head">
     <h2>{{ t('section_candidate_jobs') }}</h2>
-    <span class="count">{{ candidate_jobs|length }} {{ t('count_jobs') }}</span>
+    <span class="count"><span id="jobs-count">{{ candidate_jobs|length }}</span> {{ t('count_jobs') }}</span>
   </div>
-  {% if candidate_jobs %}
-  <div class="job-grid">
-    {% for job in candidate_jobs %}
-    <div class="job-card">
-      <div class="job-card-top">
-        <h3>{{ job.company }}<span class="pos">{{ job.position }}</span></h3>
-        {% if job.tag == 'Çok uygun' %}
-          <span class="tag tag-great">{{ t('tag_great') }}</span>
-        {% elif job.tag == 'Uygun' %}
-          <span class="tag tag-good">{{ t('tag_good') }}</span>
-        {% else %}
-          <span class="tag tag-stretch">{{ t('tag_stretch') }}</span>
-        {% endif %}
-      </div>
-      <div class="job-meta">
-        <span>📍 {{ job.city or t('city_unspecified') }}</span>
-        {% if job.link %}
-        <span class="dot">&middot;</span>
-        <a class="link-btn" href="{{ job.link }}" target="_blank" rel="noopener">{{ t('btn_view_listing') }}</a>
-        {% endif %}
-      </div>
-      <div class="job-reason">{{ job.reason or '' }}</div>
-      <div class="job-actions">
-        <form method="post" action="{{ url_for('main.apply', candidate_id=job.id) }}">
-          <button type="submit" class="primary-btn">{{ t('btn_apply') }}</button>
-        </form>
-      </div>
-    </div>
-    {% endfor %}
+
+  <div class="grid-toolbar">
+    <input type="search" class="grid-search" id="jobs-search" placeholder="{{ t('grid_search_placeholder') }}">
   </div>
-  {% else %}
-  <div class="panel"><p class="empty">{{ t('empty_candidate_jobs') }}</p></div>
-  {% endif %}
+
+  <div class="panel table-wrap">
+    <table class="grid" id="jobs-grid">
+      <thead>
+        <tr>
+          <th data-sort="company" data-type="text">{{ t('th_company') }}<span class="sort-arrow">▲</span></th>
+          <th data-sort="position" data-type="text">{{ t('th_position') }}<span class="sort-arrow">▲</span></th>
+          <th data-sort="city" data-type="text">📍 {{ t('register_city') }}<span class="sort-arrow">▲</span></th>
+          <th data-sort="tag" data-type="tag">{{ t('th_status') }}<span class="sort-arrow">▲</span></th>
+          <th class="no-sort">{{ t('field_note') }}</th>
+          <th class="no-sort">{{ t('th_actions') }}</th>
+        </tr>
+        <tr class="filter-row">
+          <th><input type="text" data-filter="company" placeholder="{{ t('grid_filter_all') }}"></th>
+          <th><input type="text" data-filter="position" placeholder="{{ t('grid_filter_all') }}"></th>
+          <th><input type="text" data-filter="city" placeholder="{{ t('grid_filter_all') }}"></th>
+          <th>
+            <select data-filter="tag">
+              <option value="">{{ t('grid_filter_all') }}</option>
+              <option value="Çok uygun">{{ t('tag_great') }}</option>
+              <option value="Uygun">{{ t('tag_good') }}</option>
+              <option value="Zorlama">{{ t('tag_stretch') }}</option>
+            </select>
+          </th>
+          <th></th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="jobs-body">
+        {% for job in candidate_jobs %}
+        <tr data-id="{{ job.id }}" data-company="{{ job.company }}" data-position="{{ job.position }}" data-city="{{ job.city or '' }}" data-tag="{{ job.tag }}">
+          <td>{{ job.company }}</td>
+          <td>{{ job.position }}</td>
+          <td>{{ job.city or t('city_unspecified') }}</td>
+          <td>
+            {% if job.tag == 'Çok uygun' %}
+              <span class="tag tag-great">{{ t('tag_great') }}</span>
+            {% elif job.tag == 'Uygun' %}
+              <span class="tag tag-good">{{ t('tag_good') }}</span>
+            {% else %}
+              <span class="tag tag-stretch">{{ t('tag_stretch') }}</span>
+            {% endif %}
+          </td>
+          <td class="note">
+            {{ job.reason or '' }}
+            {% if job.link %}<br><a class="link-btn" href="{{ job.link }}" target="_blank" rel="noopener">{{ t('btn_view_listing') }}</a>{% endif %}
+          </td>
+          <td>
+            <div class="row-actions">
+              <button type="button" class="primary-btn" data-role="apply-job">{{ t('btn_apply') }}</button>
+              <button type="button" class="danger-btn" data-role="dismiss-job">{{ t('btn_dismiss') }}</button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p class="empty" id="jobs-empty" style="display:none;">{{ t('empty_candidate_jobs') }}</p>
+  </div>
 </section>
 
 <footer class="foot">{{ t('footer_text') }}</footer>
+
+<script>
+(function () {
+  "use strict";
+
+  var CHANNEL_OPTIONS = [
+    {% for c in valid_channels %}{ value: {{ c|tojson }}, label: {{ t('channel_' + c)|tojson }} }{{ ',' if not loop.last }}{% endfor %}
+  ];
+  var STATUS_OPTIONS = [
+    {% for s in valid_statuses %}{ value: {{ s|tojson }}, label: {{ t('status_' + s|replace('-', '_'))|tojson }} }{{ ',' if not loop.last }}{% endfor %}
+  ];
+  var I18N = {
+    confirmDelete: {{ t('confirm_delete')|tojson }},
+    confirmDismiss: {{ t('confirm_dismiss')|tojson }}
+  };
+
+  function postJSON(url, body) {
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Requested-With": "fetch" },
+      body: JSON.stringify(body || {})
+    }).then(function (r) { return r.json().then(function (data) { return { status: r.status, data: data }; }); });
+  }
+
+  // ---------------------------------------------------------------- sorting
+  function initSorting(table) {
+    var state = { key: null, dir: 1 };
+    var ths = table.querySelectorAll("thead tr:first-child th[data-sort]");
+    ths.forEach(function (th) {
+      th.addEventListener("click", function () {
+        var key = th.getAttribute("data-sort");
+        var type = th.getAttribute("data-type");
+        state.dir = (state.key === key) ? -state.dir : 1;
+        state.key = key;
+        ths.forEach(function (other) { other.classList.remove("sorted"); other.querySelector(".sort-arrow").textContent = "▲"; });
+        th.classList.add("sorted");
+        th.querySelector(".sort-arrow").textContent = state.dir === 1 ? "▲" : "▼";
+        sortRows(table, key, type, state.dir);
+      });
+    });
+  }
+
+  var TAG_ORDER = { "Çok uygun": 0, "Uygun": 1, "Zorlama": 2 };
+
+  function sortRows(table, key, type, dir) {
+    var tbody = table.tBodies[0];
+    var rows = Array.prototype.slice.call(tbody.querySelectorAll("tr")).filter(function (r) { return !r.classList.contains("new-row"); });
+    rows.sort(function (a, b) {
+      var av = a.getAttribute("data-" + key) || "";
+      var bv = b.getAttribute("data-" + key) || "";
+      var cmp;
+      if (type === "tag") {
+        cmp = (TAG_ORDER[av] != null ? TAG_ORDER[av] : 99) - (TAG_ORDER[bv] != null ? TAG_ORDER[bv] : 99);
+      } else if (type === "date") {
+        cmp = av < bv ? -1 : (av > bv ? 1 : 0);
+      } else {
+        cmp = av.toLowerCase().localeCompare(bv.toLowerCase());
+      }
+      return cmp * dir;
+    });
+    rows.forEach(function (r) { tbody.appendChild(r); });
+    var newRow = tbody.querySelector(".new-row");
+    if (newRow) tbody.appendChild(newRow);
+  }
+
+  // --------------------------------------------------------------- filtering
+  function initFiltering(table, searchInput, emptyEl, countEl) {
+    var filterInputs = table.querySelectorAll(".filter-row [data-filter]");
+    function applyFilters() {
+      var globalTerm = (searchInput.value || "").toLowerCase();
+      var colFilters = {};
+      filterInputs.forEach(function (el) { colFilters[el.getAttribute("data-filter")] = el.value.toLowerCase(); });
+
+      var rows = Array.prototype.slice.call(table.tBodies[0].querySelectorAll("tr")).filter(function (r) { return !r.classList.contains("new-row"); });
+      var visible = 0;
+      rows.forEach(function (row) {
+        var text = row.textContent.toLowerCase();
+        var ok = !globalTerm || text.indexOf(globalTerm) !== -1;
+        if (ok) {
+          for (var key in colFilters) {
+            if (!colFilters[key]) continue;
+            var val = (row.getAttribute("data-" + key) || "").toLowerCase();
+            if (val.indexOf(colFilters[key]) === -1) { ok = false; break; }
+          }
+        }
+        row.classList.toggle("row-hidden", !ok);
+        if (ok) visible++;
+      });
+      if (emptyEl) emptyEl.style.display = (visible === 0 && rows.length > 0) ? "" : "none";
+      if (countEl) countEl.textContent = visible;
+    }
+    searchInput.addEventListener("input", applyFilters);
+    filterInputs.forEach(function (el) { el.addEventListener("input", applyFilters); el.addEventListener("change", applyFilters); });
+    return applyFilters;
+  }
+
+  // ------------------------------------------------------- inline cell edit
+  function flash(el) {
+    el.classList.remove("cell-saved");
+    void el.offsetWidth;
+    el.classList.add("cell-saved");
+  }
+
+  function initInlineEdit(tbody) {
+    tbody.addEventListener("dblclick", function (e) {
+      var td = e.target.closest("td.cell-editable");
+      if (!td || td.querySelector("input,select")) return;
+      startEdit(td);
+    });
+  }
+
+  function startEdit(td) {
+    var row = td.closest("tr");
+    var field = td.getAttribute("data-field");
+    var type = td.getAttribute("data-type");
+    var original = td.textContent.trim();
+    var input;
+
+    if (type === "select") {
+      input = document.createElement("select");
+      input.className = "cell-select";
+      CHANNEL_OPTIONS.forEach(function (opt) {
+        var o = document.createElement("option");
+        o.value = opt.value; o.textContent = opt.label;
+        if (row.getAttribute("data-channel") === opt.value) o.selected = true;
+        input.appendChild(o);
+      });
+    } else {
+      input = document.createElement("input");
+      input.className = "cell-input";
+      input.type = type === "date" ? "date" : "text";
+      input.value = type === "date" ? row.getAttribute("data-date") : original;
+    }
+
+    td.textContent = "";
+    td.appendChild(input);
+    input.focus();
+    if (input.select) input.select();
+
+    function commit() {
+      var value = input.value;
+      var id = row.getAttribute("data-id");
+      postJSON("/applications/" + id + "/update", { field: field, value: value }).then(function (res) {
+        if (res.data && res.data.ok) {
+          var display = type === "select"
+            ? CHANNEL_OPTIONS.filter(function (o) { return o.value === value; })[0].label
+            : (res.data.value || "");
+          td.textContent = display;
+          row.setAttribute("data-" + (field === "applied_date" ? "date" : field), res.data.value != null ? res.data.value : value);
+          flash(td);
+        } else {
+          td.textContent = original;
+        }
+      }).catch(function () { td.textContent = original; });
+    }
+
+    function cancel() { td.textContent = original; }
+
+    input.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { e.preventDefault(); commit(); }
+      else if (e.key === "Escape") { e.preventDefault(); cancel(); }
+    });
+    input.addEventListener("blur", commit);
+    if (type === "select") input.addEventListener("change", function () { input.blur(); });
+  }
+
+  // ------------------------------------------------------------ applications
+  var appTable = document.getElementById("applications-grid");
+  var appBody = document.getElementById("applications-body");
+  var appCount = document.getElementById("applications-count");
+  var appStat = document.getElementById("stat-applications");
+  var appEmpty = document.getElementById("applications-empty");
+
+  initSorting(appTable);
+  var refilterApps = initFiltering(appTable, document.getElementById("applications-search"), appEmpty, appCount);
+  initInlineEdit(appBody);
+
+  function appRowCount() {
+    return appBody.querySelectorAll("tr:not(.new-row)").length;
+  }
+  function syncAppStats() {
+    appStat.textContent = appRowCount();
+  }
+
+  function buildAppRow(data) {
+    var tr = document.createElement("tr");
+    tr.setAttribute("data-id", data.id);
+    tr.setAttribute("data-company", data.company);
+    tr.setAttribute("data-position", data.position);
+    tr.setAttribute("data-date", data.applied_date);
+    tr.setAttribute("data-channel", data.channel);
+    tr.setAttribute("data-status", data.status);
+    tr.setAttribute("data-note", data.note || "");
+
+    var channelLabel = CHANNEL_OPTIONS.filter(function (o) { return o.value === data.channel; })[0];
+    var statusOptionsHtml = STATUS_OPTIONS.map(function (o) {
+      return '<option value="' + o.value + '"' + (o.value === data.status ? " selected" : "") + ">" + o.label + "</option>";
+    }).join("");
+
+    tr.innerHTML =
+      '<td class="cell-editable" data-field="company" data-type="text"></td>' +
+      '<td class="cell-editable" data-field="position" data-type="text"></td>' +
+      '<td class="cell-editable" data-field="applied_date" data-type="date"></td>' +
+      '<td class="cell-editable" data-field="channel" data-type="select"></td>' +
+      '<td><select class="status-select" data-role="status-select">' + statusOptionsHtml + '</select></td>' +
+      '<td class="cell-editable note" data-field="note" data-type="text"></td>' +
+      '<td><button type="button" class="danger-btn" data-role="delete-application">{{ t("btn_delete") }}</button></td>';
+
+    tr.children[0].textContent = data.company;
+    tr.children[1].textContent = data.position;
+    tr.children[2].textContent = data.applied_date;
+    tr.children[3].textContent = channelLabel ? channelLabel.label : data.channel;
+    tr.children[5].textContent = data.note || "";
+    return tr;
+  }
+
+  function addAppRow(data) {
+    var tr = buildAppRow(data);
+    var newRow = appBody.querySelector(".new-row");
+    appBody.insertBefore(tr, newRow);
+    syncAppStats();
+    refilterApps();
+  }
+
+  appBody.addEventListener("change", function (e) {
+    if (e.target.matches("[data-role='status-select']")) {
+      var row = e.target.closest("tr");
+      var id = row.getAttribute("data-id");
+      postJSON("/applications/" + id + "/status", { status: e.target.value }).then(function (res) {
+        if (res.data && res.data.ok) {
+          row.setAttribute("data-status", res.data.status);
+          flash(e.target.closest("td"));
+        }
+      });
+    }
+  });
+
+  appBody.addEventListener("click", function (e) {
+    if (e.target.matches("[data-role='delete-application']")) {
+      if (!confirm(I18N.confirmDelete)) return;
+      var row = e.target.closest("tr");
+      var id = row.getAttribute("data-id");
+      postJSON("/applications/" + id + "/delete", {}).then(function (res) {
+        if (res.data && res.data.ok) {
+          row.remove();
+          syncAppStats();
+          refilterApps();
+        }
+      });
+    }
+    if (e.target.matches("[data-role='add-application']")) {
+      var newRow = appBody.querySelector(".new-row");
+      var fields = {};
+      newRow.querySelectorAll("[data-new]").forEach(function (el) { fields[el.getAttribute("data-new")] = el.value; });
+      var params = new URLSearchParams(fields);
+      fetch("/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "fetch" },
+        body: params.toString()
+      }).then(function (r) { return r.json(); }).then(function (data) {
+        if (data.ok) {
+          addAppRow(data.application);
+          newRow.querySelectorAll("[data-new]").forEach(function (el) { el.value = ""; });
+        }
+      });
+    }
+  });
+
+  // -------------------------------------------------------------- candidate jobs
+  var jobsTable = document.getElementById("jobs-grid");
+  var jobsBody = document.getElementById("jobs-body");
+  var jobsCount = document.getElementById("jobs-count");
+  var jobsStat = document.getElementById("stat-candidate-jobs");
+  var greatStat = document.getElementById("stat-great-jobs");
+  var jobsEmpty = document.getElementById("jobs-empty");
+
+  initSorting(jobsTable);
+  var refilterJobs = initFiltering(jobsTable, document.getElementById("jobs-search"), jobsEmpty, jobsCount);
+
+  function syncJobStats() {
+    var rows = jobsBody.querySelectorAll("tr");
+    jobsStat.textContent = rows.length;
+    var great = 0;
+    rows.forEach(function (r) { if (r.getAttribute("data-tag") === "Çok uygun") great++; });
+    greatStat.textContent = great;
+  }
+
+  jobsBody.addEventListener("click", function (e) {
+    var row = e.target.closest("tr");
+    if (!row) return;
+    var id = row.getAttribute("data-id");
+
+    if (e.target.matches("[data-role='apply-job']")) {
+      postJSON("/apply/" + id, {}).then(function (res) {
+        if (res.data && res.data.ok) {
+          row.remove();
+          syncJobStats();
+          refilterJobs();
+          addAppRow(res.data.application);
+        }
+      });
+    }
+    if (e.target.matches("[data-role='dismiss-job']")) {
+      if (!confirm(I18N.confirmDismiss)) return;
+      postJSON("/jobs/" + id + "/delete", {}).then(function (res) {
+        if (res.data && res.data.ok) {
+          row.remove();
+          syncJobStats();
+          refilterJobs();
+        }
+      });
+    }
+  });
+})();
+</script>
 {% endblock %}
