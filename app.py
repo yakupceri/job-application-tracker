@@ -42,7 +42,9 @@ import functools
 import hmac
 import io
 import os
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+
+from sqlalchemy import func
 
 from flask import (
     Blueprint,
@@ -126,6 +128,22 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "nav_logout": {"tr": "Çıkış yap", "en": "Log out"},
     "nav_hello": {"tr": "Merhaba", "en": "Hello"},
     "nav_profile": {"tr": "Profil", "en": "Profile"},
+    "nav_stats": {"tr": "📊 İstatistikler", "en": "📊 Statistics"},
+    "nav_back_dashboard": {"tr": "← Panel", "en": "← Dashboard"},
+
+    "stats_heading": {"tr": "İstatistikler", "en": "Statistics"},
+    "stats_subtitle": {
+        "tr": "Başvurularının genel durumu, tek bakışta.",
+        "en": "Your applications, at a glance.",
+    },
+    "stat_total_applications": {"tr": "Toplam başvuru", "en": "Total applications"},
+    "stat_response_rate": {"tr": "Mülakat + teklif oranı", "en": "Interview + offer rate"},
+    "stat_pending_followups": {"tr": "Takip bekleyen", "en": "Awaiting follow-up"},
+    "stats_section_status": {"tr": "Durum dağılımı", "en": "Status breakdown"},
+    "stats_section_channel": {"tr": "Kanal dağılımı", "en": "Channel breakdown"},
+    "stats_section_tags": {"tr": "İlan etiket dağılımı", "en": "Candidate lead breakdown"},
+    "stats_section_monthly": {"tr": "Aylık başvuru sayısı", "en": "Applications per month"},
+    "stats_empty": {"tr": "Henüz veri yok.", "en": "No data yet."},
 
     "stat_applications": {"tr": "Başvuru", "en": "Applications"},
     "stat_great_jobs": {"tr": "Çok uygun ilan", "en": "Great-fit leads"},
@@ -931,6 +949,105 @@ def dismiss_candidate_job(candidate_id: int):
     if _wants_json():
         return jsonify({"ok": True})
     return redirect(url_for("main.index"))
+
+
+# ---------------------------------------------------------------------------
+# Stats / charts
+# ---------------------------------------------------------------------------
+
+
+def _grouped_counts(column) -> dict:
+    rows = (
+        db.session.query(column, func.count())
+        .filter(Application.user_id == current_user.id)
+        .group_by(column)
+        .all()
+    )
+    return {key: count for key, count in rows}
+
+
+@bp.route("/stats")
+@login_required
+def stats():
+    status_counts = _grouped_counts(Application.status)
+    channel_counts = _grouped_counts(Application.channel)
+
+    tag_rows = (
+        db.session.query(CandidateJob.tag, func.count())
+        .filter(CandidateJob.user_id == current_user.id)
+        .group_by(CandidateJob.tag)
+        .all()
+    )
+    tag_counts = {tag: count for tag, count in tag_rows}
+
+    month_expr = func.substr(Application.applied_date, 1, 7)
+    monthly_rows = (
+        db.session.query(month_expr, func.count())
+        .filter(Application.user_id == current_user.id)
+        .group_by(month_expr)
+        .order_by(month_expr)
+        .all()
+    )
+    monthly_rows = monthly_rows[-12:]  # keep the dashboard readable: last 12 months
+
+    def chart(keys, counts, label_fn, slug_fn=lambda k: k):
+        values = [counts.get(k, 0) for k in keys]
+        top = max(values) if values else 0
+        return {
+            "bars": [
+                {
+                    "key": k,
+                    "slug": slug_fn(k),
+                    "label": label_fn(k),
+                    "count": v,
+                    "pct": round(100 * v / top) if top else 0,
+                }
+                for k, v in zip(keys, values)
+            ],
+            "max": top,
+        }
+
+    status_chart = chart(tracker.VALID_STATUSES, status_counts, lambda s: t("status_" + s.replace("-", "_")))
+    channel_chart = chart(tracker.VALID_CHANNELS, channel_counts, lambda c: t("channel_" + c), slug_fn=lambda c: "channel")
+    tag_slug = {"Çok uygun": "great", "Uygun": "good", "Zorlama": "stretch"}
+    tag_label = {"Çok uygun": t("tag_great"), "Uygun": t("tag_good"), "Zorlama": t("tag_stretch")}
+    tag_chart = chart(jobs.VALID_TAGS, tag_counts, lambda tag: tag_label[tag], slug_fn=lambda tag: tag_slug[tag])
+
+    monthly_top = max((c for _, c in monthly_rows), default=0)
+    monthly_chart = {
+        "bars": [
+            {
+                "key": month,
+                "label": (month[5:7] + "/" + month[2:4]) if month else "",
+                "count": count,
+                "pct": round(100 * count / monthly_top) if monthly_top else 0,
+            }
+            for month, count in monthly_rows
+        ],
+        "max": monthly_top,
+    }
+
+    total_applications = sum(status_counts.values())
+    positive = status_counts.get("interview", 0) + status_counts.get("offer", 0)
+    response_rate = round(100 * positive / total_applications) if total_applications else 0
+
+    followup_threshold = (date.today() - timedelta(days=tracker.FOLLOWUP_THRESHOLD_DAYS)).isoformat()
+    pending_followups = (
+        Application.query.filter_by(user_id=current_user.id, status=tracker.DEFAULT_STATUS)
+        .filter(Application.applied_date <= followup_threshold)
+        .count()
+    )
+
+    return render_template(
+        "stats.html",
+        total_applications=total_applications,
+        response_rate=response_rate,
+        pending_followups=pending_followups,
+        status_chart=status_chart,
+        channel_chart=channel_chart,
+        tag_chart=tag_chart,
+        monthly_chart=monthly_chart,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block body %}
+<header class="top">
+  <div class="logo">📊</div>
+  <div>
+    <h1>{{ t('stats_heading') }}</h1>
+    <p>{{ t('stats_subtitle') }}</p>
+  </div>
+  <div class="spacer"></div>
+  <div class="toolbar">
+    <button type="button" class="theme-btn" onclick="toggleTheme()">🌓 {{ t('theme_toggle') }}</button>
+    <span class="lang-switch">
+      <a href="{{ url_for('main.set_lang', lang_code='tr') }}" class="{{ 'active' if lang == 'tr' else '' }}">TR</a>
+      <a href="{{ url_for('main.set_lang', lang_code='en') }}" class="{{ 'active' if lang == 'en' else '' }}">EN</a>
+    </span>
+    <a class="pill-btn" href="{{ url_for('main.index') }}">{{ t('nav_back_dashboard') }}</a>
+  </div>
+</header>
+
+<div class="stats-row">
+  <div class="stat">
+    <div class="num">{{ total_applications }}</div>
+    <div class="label">{{ t('stat_total_applications') }}</div>
+  </div>
+  <div class="stat accent-ok">
+    <div class="num">%{{ response_rate }}</div>
+    <div class="label">{{ t('stat_response_rate') }}</div>
+  </div>
+  <div class="stat accent-warn">
+    <div class="num">{{ pending_followups }}</div>
+    <div class="label">{{ t('stat_pending_followups') }}</div>
+  </div>
+</div>
+
+<section>
+  <div class="stats-grid">
+
+    <div class="chart-panel">
+      <h3>{{ t('stats_section_status') }}</h3>
+      {% if total_applications == 0 %}
+      <p class="empty-chart">{{ t('stats_empty') }}</p>
+      {% else %}
+      {% for bar in status_chart.bars %}
+      <div class="bar-row">
+        <span class="bar-label">{{ bar.label }}</span>
+        <div class="bar-track"><div class="bar-fill status-{{ bar.slug }}" style="width: {{ bar.pct }}%;"></div></div>
+        <span class="bar-value">{{ bar.count }}</span>
+      </div>
+      {% endfor %}
+      {% endif %}
+    </div>
+
+    <div class="chart-panel">
+      <h3>{{ t('stats_section_channel') }}</h3>
+      {% if total_applications == 0 %}
+      <p class="empty-chart">{{ t('stats_empty') }}</p>
+      {% else %}
+      {% for bar in channel_chart.bars %}
+      <div class="bar-row">
+        <span class="bar-label">{{ bar.label }}</span>
+        <div class="bar-track"><div class="bar-fill channel" style="width: {{ bar.pct }}%;"></div></div>
+        <span class="bar-value">{{ bar.count }}</span>
+      </div>
+      {% endfor %}
+      {% endif %}
+    </div>
+
+    <div class="chart-panel">
+      <h3>{{ t('stats_section_tags') }}</h3>
+      {% if tag_chart.max == 0 %}
+      <p class="empty-chart">{{ t('stats_empty') }}</p>
+      {% else %}
+      {% for bar in tag_chart.bars %}
+      <div class="bar-row">
+        <span class="bar-label">{{ bar.label }}</span>
+        <div class="bar-track"><div class="bar-fill chart-tag-{{ bar.slug }}" style="width: {{ bar.pct }}%;"></div></div>
+        <span class="bar-value">{{ bar.count }}</span>
+      </div>
+      {% endfor %}
+      {% endif %}
+    </div>
+
+    <div class="chart-panel">
+      <h3>{{ t('stats_section_monthly') }}</h3>
+      {% if monthly_chart.max == 0 %}
+      <p class="empty-chart">{{ t('stats_empty') }}</p>
+      {% else %}
+      <div class="col-chart">
+        {% for bar in monthly_chart.bars %}
+        <div class="col">
+          <span class="col-value">{{ bar.count }}</span>
+          <div class="col-bar" style="height: {{ bar.pct }}%;"></div>
+          <span class="col-label">{{ bar.label }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+</section>
+
+<footer class="foot">{{ t('footer_text') }}</footer>
+{% endblock %}

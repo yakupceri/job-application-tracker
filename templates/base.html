@@ -234,6 +234,59 @@
   }
   td.cell-error { outline: 2px solid var(--bad); outline-offset: -2px; }
 
+  /* --- Charts (stats page) --- */
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
+  @media (max-width: 820px) { .stats-grid { grid-template-columns: 1fr; } }
+  .chart-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 1.2rem 1.3rem;
+  }
+  .chart-panel h3 { margin: 0 0 1.1rem; font-size: 0.92rem; font-weight: 700; letter-spacing: -0.01em; }
+
+  .bar-row { display: flex; align-items: center; gap: 0.7rem; margin-bottom: 0.6rem; }
+  .bar-row:last-child { margin-bottom: 0; }
+  .bar-label {
+    flex: 0 0 108px;
+    font-size: 0.78rem;
+    color: var(--muted);
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .bar-track { flex: 1; background: var(--surface-2); border-radius: 5px; height: 22px; position: relative; }
+  .bar-fill { height: 100%; min-width: 3px; border-radius: 0 5px 5px 0; transition: width 0.4s ease; }
+  .bar-value { flex: 0 0 24px; font-size: 0.78rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+
+  .bar-fill.status-sent { background: #4338ca; }
+  .bar-fill.status-followed-up { background: #c2410c; }
+  .bar-fill.status-interview { background: #7e22ce; }
+  .bar-fill.status-offer { background: var(--ok); }
+  .bar-fill.status-rejected { background: var(--bad); }
+  :root[data-theme="dark"] .bar-fill.status-sent { background: #b3b2ff; }
+  :root[data-theme="dark"] .bar-fill.status-followed-up { background: #ffbd7a; }
+  :root[data-theme="dark"] .bar-fill.status-interview { background: #dcb4ff; }
+
+  .bar-fill.chart-tag-great { background: #047857; }
+  .bar-fill.chart-tag-good { background: #ca8a04; }
+  .bar-fill.chart-tag-stretch { background: #dc2626; }
+  :root[data-theme="dark"] .bar-fill.chart-tag-great { background: #35c17e; }
+  :root[data-theme="dark"] .bar-fill.chart-tag-good { background: #e8a33d; }
+  :root[data-theme="dark"] .bar-fill.chart-tag-stretch { background: #ff6b6b; }
+
+  .bar-fill.channel { background: var(--accent-2); }
+
+  .empty-chart { color: var(--muted); font-size: 0.84rem; padding: 1rem 0; text-align: center; }
+
+  .col-chart { display: flex; align-items: flex-end; gap: 0.6rem; height: 150px; }
+  .col-chart .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; min-width: 0; }
+  .col-chart .col-value { font-size: 0.72rem; color: var(--muted); margin-bottom: 0.3rem; font-variant-numeric: tabular-nums; }
+  .col-chart .col-bar { width: 100%; max-width: 30px; min-height: 3px; background: var(--accent); border-radius: 4px 4px 0 0; transition: height 0.4s ease; }
+  .col-chart .col-label { margin-top: 0.4rem; font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
+
   .pill {
     display: inline-flex; align-items: center; gap: 0.35rem;
     padding: 0.28rem 0.7rem;

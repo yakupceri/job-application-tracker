@@ -14,6 +14,7 @@
       <a href="{{ url_for('main.set_lang', lang_code='en') }}" class="{{ 'active' if lang == 'en' else '' }}">EN</a>
     </span>
     {% if username %}
+    <a class="pill-btn" href="{{ url_for('main.stats') }}">{{ t('nav_stats') }}</a>
     <a class="pill-btn" href="{{ url_for('main.profile') }}">👤 {{ username }}</a>
     <form method="post" action="{{ url_for('main.logout') }}">
       <button type="submit" class="pill-btn">{{ t('nav_logout') }}</button>
